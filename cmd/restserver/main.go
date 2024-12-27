@@ -11,10 +11,15 @@ import (
 
 	"github.com/gorilla/mux"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
+	"github.com/urfave/cli/v2"
 
 	"github.com/abshkbh/chv-lambda/out/gen/serverapi"
-	"github.com/abshkbh/chv-lambda/pkg/config"
 	"github.com/abshkbh/chv-lambda/pkg/server"
+)
+
+const (
+	restServerConfigKey = "host.restserver"
 )
 
 type restServer struct {
@@ -124,10 +129,51 @@ func (s *restServer) listVM(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
-	// Create the VM server
-	vmServer, err := server.NewServer(config.StateDir, config.BridgeName, config.BridgeIP, config.BridgeSubnet)
+	var serverConfig server.ServerConfig
+	var configFile string
+
+	app := &cli.App{
+		Name:  "chv-restserver",
+		Usage: "A daemon for spawning and managing cloud-hypervisor based microVMs.",
+		Flags: []cli.Flag{
+			&cli.StringFlag{
+				Name:        "config",
+				Aliases:     []string{"c"},
+				Required:    true,
+				Usage:       "Path to config file",
+				Destination: &configFile,
+			},
+		},
+		Action: func(ctx *cli.Context) error {
+			viper.SetConfigFile(configFile)
+			err := viper.ReadInConfig()
+			if err != nil {
+				return fmt.Errorf("failed to read config: %v", err)
+			}
+
+			restServerConfig := viper.Sub(restServerConfigKey)
+			if restServerConfig == nil {
+				return fmt.Errorf("restserver configuration not found")
+			}
+
+			if err := restServerConfig.Unmarshal(&serverConfig); err != nil {
+				return fmt.Errorf("error unmarshalling config: %v", err)
+			}
+			log.Infof("server config: %v", serverConfig)
+			return nil
+		},
+	}
+
+	err := app.Run(os.Args)
 	if err != nil {
-		log.Fatalf("Failed to create VM server: %v", err)
+		log.WithError(err).Fatal("server exited with error")
+	}
+
+	// At this point `serverConfig` is populated.
+	// Create the VM server
+	vmServer, err := server.NewServer(serverConfig)
+	if err != nil {
+		log.Fatalf("failed to create VM server: %v", err)
 	}
 
 	// Create REST server
@@ -144,12 +190,12 @@ func main() {
 
 	// Start HTTP server
 	srv := &http.Server{
-		Addr:    config.RestServerAddr + ":" + config.RestServerPort,
+		Addr:    serverConfig.Host + ":" + serverConfig.Port,
 		Handler: r,
 	}
 
 	go func() {
-		log.Printf("REST server listening on: %s:%s", config.RestServerAddr, config.RestServerPort)
+		log.Printf("REST server listening on: %s:%s", serverConfig.Host, serverConfig.Port)
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 			log.Fatalf("Failed to start server: %v", err)
 		}

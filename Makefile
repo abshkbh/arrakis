@@ -38,7 +38,7 @@ ${OUT_DIR}/chv-chvapi.stamp: api/chv-api.yaml
 	--global-property models,supportingFiles,apis,apiTests=false
 	rm -rf openapitools.json
 
-restserver: serverapi chvapi guestrootfs
+restserver: serverapi chvapi
 	mkdir -p ${OUT_DIR}
 	go build -o ${RESTSERVER_BIN} ./cmd/restserver
 

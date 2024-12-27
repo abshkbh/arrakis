@@ -28,6 +28,30 @@ import (
 // vmStatus represents the status of a VM.
 type vmStatus int
 
+type ServerConfig struct {
+	Host         string `mapstructure:"host"`
+	Port         string `mapstructure:"port"`
+	StateDir     string `mapstructure:"state_dir"`
+	BridgeName   string `mapstructure:"bridge_name"`
+	BridgeIP     string `mapstructure:"bridge_ip"`
+	BridgeSubnet string `mapstructure:"bridge_subnet"`
+	KernelPath   string `mapstructure:"kernel"`
+	ChvBinPath   string `mapstructure:"chv_bin"`
+}
+
+func (c ServerConfig) String() string {
+	return fmt.Sprintf(`{
+Host: %s
+Port: %s
+StateDir:     %s
+BridgeName:   %s
+BridgeIP:     %s
+BridgeSubnet: %s
+KernelPath:   %s
+ChvBinPath:   %s
+}`, c.Host, c.Port, c.StateDir, c.BridgeName, c.BridgeIP, c.BridgeSubnet, c.KernelPath, c.ChvBinPath)
+}
+
 const (
 	vmStatusStarted vmStatus = iota
 	vmStatusRunning
@@ -279,29 +303,29 @@ func reapProcess(process *os.Process, logger *log.Entry, timeout time.Duration) 
 	return fmt.Errorf("VM process was force killed after timeout")
 }
 
-func NewServer(stateDir string, bridgeName string, bridgeIP string, bridgeSubnet string) (*Server, error) {
-	err := os.MkdirAll(stateDir, 0755)
+func NewServer(config ServerConfig) (*Server, error) {
+	err := os.MkdirAll(config.StateDir, 0755)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create vm state dir: %w", err)
+		return nil, fmt.Errorf("failed to create vm state dir: %v err: %w", config.StateDir, err)
 	}
 
 	ipBackupFile := fmt.Sprintf("/tmp/iptables-backup-%s.rules", time.Now().Format(time.UnixDate))
-	err = setupBridgeAndFirewall(ipBackupFile, bridgeName, bridgeIP, bridgeSubnet)
+	err = setupBridgeAndFirewall(ipBackupFile, config.BridgeName, config.BridgeIP, config.BridgeSubnet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to setup networking on the host: %w", err)
 	}
 
-	ipAllocator, err := ipallocator.NewIPAllocator(bridgeSubnet)
+	ipAllocator, err := ipallocator.NewIPAllocator(config.BridgeSubnet)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create ip allocator: %w", err)
 	}
 
 	return &Server{
 		vms:         make(map[string]*vm),
-		fountain:    fountain.NewFountain(bridgeName),
+		fountain:    fountain.NewFountain(config.BridgeName),
 		ipAllocator: ipAllocator,
-		stateDir:    stateDir,
-		bridgeIP:    bridgeIP,
+		stateDir:    config.StateDir,
+		bridgeIP:    config.BridgeIP,
 	}, nil
 }
 
