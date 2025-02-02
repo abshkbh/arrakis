@@ -231,5 +231,10 @@ func main() {
 		log.Fatalf("Server shutdown failed: %v", err)
 	}
 	vmServer.DestroyAllVMs(context.Background())
+
+	// Nuke all remaining state.
+	if err := os.RemoveAll(serverConfig.StateDir); err != nil {
+		log.Warnf("Failed to remove state dir: %v", err)
+	}
 	log.Println("Server stopped")
 }

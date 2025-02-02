@@ -72,6 +72,11 @@ const (
 
 	portAllocatorLowPort  = 3000
 	portAllocatorHighPort = 6000
+
+	// Path under stateDir for common state.
+	commonStateSubdir     = "common"
+	statefulDiskName      = "stateful.img"
+	statefulDiskSizeBytes = 2 * 1024 * 1024 * 1024
 )
 
 var (
@@ -106,6 +111,31 @@ type vm struct {
 	tapDevice     string
 	status        vmStatus
 	portForwards  []portForward
+}
+
+// createBtrfsImage creates an image file of the specified size and formats it as btrfs.
+// The size should be specified in bytes.
+func createBtrfsImage(filePath string, sizeInBytes int64) error {
+	// Create a sparse file of the specified size
+	cmd := exec.Command(
+		"dd",
+		"if=/dev/zero",
+		fmt.Sprintf("of=%s", filePath),
+		"bs=1",
+		fmt.Sprintf("count=0"),
+		fmt.Sprintf("seek=%d", sizeInBytes),
+	)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create image file: %w", err)
+	}
+
+	// Format the image as btrfs
+	cmd = exec.Command("mkfs.btrfs", "-f", filePath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to format image as btrfs: %s: %w", string(output), err)
+	}
+
+	return nil
 }
 
 func getKernelCmdLine(gatewayIP string, guestIP string, entryPoint string) string {
@@ -531,6 +561,16 @@ func NewServer(config config.ServerConfig) (*Server, error) {
 
 	if err := os.MkdirAll(config.StateDir, 0755); err != nil {
 		return nil, fmt.Errorf("failed to create vm state dir: %v err: %w", config.StateDir, err)
+	}
+
+	commonStateDir := path.Join(config.StateDir, commonStateSubdir)
+	if err := os.MkdirAll(commonStateDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create vm state dir: %v err: %w", commonStateDir, err)
+	}
+
+	statefulDiskPath := path.Join(commonStateDir, statefulDiskName)
+	if err := createBtrfsImage(statefulDiskPath, statefulDiskSizeBytes); err != nil {
+		return nil, fmt.Errorf("failed to create stateful disk: %w", err)
 	}
 
 	ipBackupFile := fmt.Sprintf("/tmp/iptables-backup-%s.rules", time.Now().Format(time.UnixDate))
