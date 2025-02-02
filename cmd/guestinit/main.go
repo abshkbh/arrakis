@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	ifname = "eth0"
-	ipBin  = "/usr/bin/ip"
+	ifname          = "eth0"
+	ipBin           = "/usr/bin/ip"
+	defaultPassword = "elara0000"
 )
 
 // parseKeyFromCmdLine parses a key from the kernel command line. Assumes each
@@ -104,11 +105,78 @@ func setupNetworking(guestCIDR string, gatewayIP string) error {
 	return nil
 }
 
+// parseVMName parses the VM name from the kernel command line.
+func parseVMName() (string, error) {
+	vmName, err := parseKeyFromCmdLine("vm_name")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse vm_name: %w", err)
+	}
+	return vmName, nil
+}
+
+// createUser creates a new user with the given username and password,
+// creates their home directory, and adds them to the sudo group.
+func createUser(username, password string) error {
+	// Create user with home directory
+	cmd := exec.Command("useradd", "-m", username)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create user %s: %w", username, err)
+	}
+
+	// Set user password
+	cmd = exec.Command("chpasswd")
+	cmd.Stdin = strings.NewReader(fmt.Sprintf("%s:%s", username, password))
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set password for user %s: %w", username, err)
+	}
+
+	// Add user to sudo group
+	cmd = exec.Command("adduser", username, "sudo")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to add user %s to sudo group: %w", username, err)
+	}
+
+	return nil
+}
+
+func mountStatefulDisk(vmName string) error {
+	cmd := exec.Command("mount", "-o", "subvol="+vmName, "/dev/vdb", "/home")
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to mount subvolume: %w, output: %s", err, string(output))
+	}
+	return nil
+}
+
 func main() {
 	log.Infof("starting guestinit")
-	err := os.WriteFile("/etc/hostname", []byte("chv-vm"), 0644)
+
+	// Get VM name from kernel command line.
+	vmName, err := parseVMName()
 	if err != nil {
+		log.WithError(err).Fatal("failed to parse VM name")
+	}
+
+	log.Infof("XXX1A: vmName: %s", vmName)
+	err = mountStatefulDisk(vmName)
+	if err != nil {
+		log.Infof("XXX2: err: %v", err)
+	} else {
+		log.Infof("XXX3: mounted stateful disk")
+	}
+
+	if err := createUser(vmName, defaultPassword); err != nil {
+		log.WithError(err).Fatal("failed to create user")
+	}
+
+	// Use VM name for hostname
+	if err := os.WriteFile("/etc/hostname", []byte(vmName), 0644); err != nil {
 		log.WithError(err).Fatal("failed to write hostname")
+	}
+
+	// Also update /etc/hosts to include the VM name.
+	hostsContent := fmt.Sprintf("127.0.0.1\tlocalhost\n127.0.1.1\t%s\n", vmName)
+	if err := os.WriteFile("/etc/hosts", []byte(hostsContent), 0644); err != nil {
+		log.WithError(err).Fatal("failed to write /etc/hosts")
 	}
 
 	guestCIDR, gatewayIP, err := parseNetworkingMetadata()
@@ -117,10 +185,8 @@ func main() {
 	}
 
 	// Setup networking.
-	err = setupNetworking(guestCIDR, gatewayIP)
-	if err != nil {
+	if err := setupNetworking(guestCIDR, gatewayIP); err != nil {
 		log.WithError(err).Fatal("failed to setup networking")
 	}
-
 	log.Info("guestinit exiting...")
 }

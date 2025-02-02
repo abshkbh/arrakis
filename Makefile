@@ -64,7 +64,7 @@ cmdserver:
 	mkdir -p ${OUT_DIR}
 	CGO_ENABLED=0 go build -o ${CMDSERVER_BIN} ./cmd/cmdserver
 
-guestrootfs: rootfsmaker guestinit
+guestrootfs: rootfsmaker guestinit cmdserver
 	mkdir -p ${OUT_DIR}
 	sudo ${OUT_DIR}/chv-rootfsmaker create -o ${GUESTROOTFS_BIN} -d ./resources/scripts/rootfs/Dockerfile
 

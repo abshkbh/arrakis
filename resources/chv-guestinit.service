@@ -1,15 +1,17 @@
 [Unit]
 Description=CHV Guest Initialization Service
 DefaultDependencies=no
-After=local-fs.target
+After=local-fs.target systemd-remount-fs.service dev-vdb.device
 Before=network.target
 Conflicts=shutdown.target
 RequiresMountsFor=/proc /sys /dev
+ConditionPathExists=!/var/lib/chv-guestinit/initialized
 
 [Service]
-Type=simple
+Type=oneshot
+RemainAfterExit=yes
 ExecStart=/usr/local/bin/chv-guestinit
-Restart=no
+ExecStartPost=/usr/bin/touch /var/lib/chv-guestinit/initialized
 StandardOutput=journal
 StandardError=journal
 
