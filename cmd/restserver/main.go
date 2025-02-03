@@ -233,7 +233,7 @@ func main() {
 	vmServer.DestroyAllVMs(context.Background())
 
 	// Nuke all remaining state.
-	if err := os.RemoveAll(serverConfig.StateDir); err != nil {
+	if err := os.RemoveAll(vmServer.GetStateDir()); err != nil {
 		log.Warnf("Failed to remove state dir: %v", err)
 	}
 	log.Println("Server stopped")

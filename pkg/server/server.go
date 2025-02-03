@@ -918,6 +918,10 @@ type Server struct {
 	config        config.ServerConfig
 }
 
+func (s *Server) GetStateDir() string {
+	return s.config.StateDir
+}
+
 func (s *Server) StartVM(ctx context.Context, req *serverapi.StartVMRequest) (*serverapi.StartVMResponse, error) {
 	log.Infof("Server config in StartVM: %+v", s.config)
 	vmName := req.GetVmName()
