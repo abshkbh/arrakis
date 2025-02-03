@@ -121,6 +121,7 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("failed to parse VM name")
 	}
+	log.Infof("XXX: vmName: %s", vmName)
 
 	// Use VM name for hostname
 	err = os.WriteFile("/etc/hostname", []byte(vmName), 0644)
