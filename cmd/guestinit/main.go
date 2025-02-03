@@ -104,11 +104,35 @@ func setupNetworking(guestCIDR string, gatewayIP string) error {
 	return nil
 }
 
+// parseVMName parses the VM name from the kernel command line.
+func parseVMName() (string, error) {
+	vmName, err := parseKeyFromCmdLine("vm_name")
+	if err != nil {
+		return "", fmt.Errorf("failed to parse vm_name: %w", err)
+	}
+	return vmName, nil
+}
+
 func main() {
 	log.Infof("starting guestinit")
-	err := os.WriteFile("/etc/hostname", []byte("chv-vm"), 0644)
+
+	// Get VM name from kernel command line.
+	vmName, err := parseVMName()
+	if err != nil {
+		log.WithError(err).Fatal("failed to parse VM name")
+	}
+
+	// Use VM name for hostname
+	err = os.WriteFile("/etc/hostname", []byte(vmName), 0644)
 	if err != nil {
 		log.WithError(err).Fatal("failed to write hostname")
+	}
+
+	// Also update /etc/hosts to include the VM name.
+	hostsContent := fmt.Sprintf("127.0.0.1\tlocalhost\n127.0.1.1\t%s\n", vmName)
+	err = os.WriteFile("/etc/hosts", []byte(hostsContent), 0644)
+	if err != nil {
+		log.WithError(err).Fatal("failed to write /etc/hosts")
 	}
 
 	guestCIDR, gatewayIP, err := parseNetworkingMetadata()

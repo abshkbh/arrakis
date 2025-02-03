@@ -139,11 +139,12 @@ func createBtrfsImage(filePath string, sizeInBytes int64) error {
 	return nil
 }
 
-func getKernelCmdLine(gatewayIP string, guestIP string, entryPoint string) string {
+func getKernelCmdLine(gatewayIP string, guestIP string, entryPoint string, vmName string) string {
 	return fmt.Sprintf(
-		"console=ttyS0 gateway_ip=\"%s\" guest_ip=\"%s\" root=/dev/vda rw entry_point=\"%s\" init=%s",
+		"console=ttyS0 gateway_ip=\"%s\" guest_ip=\"%s\" vm_name=\"%s\" root=/dev/vda rw entry_point=\"%s\" init=%s",
 		gatewayIP,
 		guestIP,
+		vmName,
 		entryPoint,
 		initPath,
 	)
@@ -860,7 +861,7 @@ func (s *Server) createVM(
 		vmConfig := chvapi.VmConfig{
 			Payload: chvapi.PayloadConfig{
 				Kernel:  String(kernelPath),
-				Cmdline: String(getKernelCmdLine(s.config.BridgeIP, guestIP.String(), entryPoint)),
+				Cmdline: String(getKernelCmdLine(s.config.BridgeIP, guestIP.String(), entryPoint, vmName)),
 			},
 			Disks:   []chvapi.DiskConfig{{Path: rootfsPath}},
 			Cpus:    &chvapi.CpusConfig{BootVcpus: numBootVcpus, MaxVcpus: numBootVcpus},
