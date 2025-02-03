@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	ifname = "eth0"
-	ipBin  = "/usr/bin/ip"
+	ifname          = "eth0"
+	ipBin           = "/usr/bin/ip"
+	defaultPassword = "elara0000"
 )
 
 // parseKeyFromCmdLine parses a key from the kernel command line. Assumes each
@@ -113,6 +114,31 @@ func parseVMName() (string, error) {
 	return vmName, nil
 }
 
+// createUser creates a new user with the given username and password,
+// creates their home directory, and adds them to the sudo group.
+func createUser(username, password string) error {
+	// Create user with home directory
+	cmd := exec.Command("useradd", "-m", username)
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to create user %s: %w", username, err)
+	}
+
+	// Set user password
+	cmd = exec.Command("chpasswd")
+	cmd.Stdin = strings.NewReader(fmt.Sprintf("%s:%s", username, password))
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to set password for user %s: %w", username, err)
+	}
+
+	// Add user to sudo group
+	cmd = exec.Command("adduser", username, "sudo")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to add user %s to sudo group: %w", username, err)
+	}
+
+	return nil
+}
+
 func main() {
 	log.Infof("starting guestinit")
 
@@ -123,16 +149,18 @@ func main() {
 	}
 	log.Infof("XXX: vmName: %s", vmName)
 
+	if err := createUser(vmName, defaultPassword); err != nil {
+		log.WithError(err).Error("failed to create user")
+	}
+
 	// Use VM name for hostname
-	err = os.WriteFile("/etc/hostname", []byte(vmName), 0644)
-	if err != nil {
+	if err := os.WriteFile("/etc/hostname", []byte(vmName), 0644); err != nil {
 		log.WithError(err).Fatal("failed to write hostname")
 	}
 
 	// Also update /etc/hosts to include the VM name.
 	hostsContent := fmt.Sprintf("127.0.0.1\tlocalhost\n127.0.1.1\t%s\n", vmName)
-	err = os.WriteFile("/etc/hosts", []byte(hostsContent), 0644)
-	if err != nil {
+	if err := os.WriteFile("/etc/hosts", []byte(hostsContent), 0644); err != nil {
 		log.WithError(err).Fatal("failed to write /etc/hosts")
 	}
 
@@ -142,10 +170,8 @@ func main() {
 	}
 
 	// Setup networking.
-	err = setupNetworking(guestCIDR, gatewayIP)
-	if err != nil {
+	if err := setupNetworking(guestCIDR, gatewayIP); err != nil {
 		log.WithError(err).Fatal("failed to setup networking")
 	}
-
 	log.Info("guestinit exiting...")
 }
