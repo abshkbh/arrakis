@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -597,11 +598,12 @@ func NewServer(config config.ServerConfig) (*Server, error) {
 	}
 
 	return &Server{
-		vms:           make(map[string]*vm),
-		fountain:      fountain.NewFountain(config.BridgeName),
-		ipAllocator:   ipAllocator,
-		portAllocator: portAllocator,
-		config:        config,
+		vms:              make(map[string]*vm),
+		fountain:         fountain.NewFountain(config.BridgeName),
+		ipAllocator:      ipAllocator,
+		portAllocator:    portAllocator,
+		config:           config,
+		statefulDiskPath: statefulDiskPath,
 	}, nil
 }
 
@@ -618,6 +620,107 @@ func (s *Server) getVMAtomic(vmName string) *vm {
 		return nil
 	}
 	return vm
+}
+
+// createStatefulDiskBtrfsSubvolume creates a btrfs subvolume in the stateful disk image.
+// subvolName is the name of the subvolume to create
+func (s *Server) createStatefulDiskBtrfsSubvolume(subvolName string) error {
+	mountPoint := "/tmp/chv-mnt"
+	logger := log.WithFields(log.Fields{
+		"mountPoint": mountPoint,
+		"subvolume":  subvolName,
+	})
+	logger.Info("creating btrfs subvolume")
+	cleanup := cleanup.Make(func() {
+		logger.Info("clean up done")
+	})
+	defer func() {
+		cleanup.Clean()
+	}()
+
+	if err := os.MkdirAll(mountPoint, 0755); err != nil {
+		return fmt.Errorf("failed to create mount point: %w", err)
+	}
+
+	cmd := exec.Command("mount", "-t", "btrfs", s.statefulDiskPath, mountPoint)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to mount stateful disk: %s: %w", string(output), err)
+	}
+	cleanup.Add(func() {
+		if err := exec.Command("umount", mountPoint).Run(); err != nil {
+			logger.WithError(err).Error("failed to unmount stateful disk")
+		}
+	})
+
+	subvolPath := filepath.Join(mountPoint, subvolName)
+	cmd = exec.Command("btrfs", "subvolume", "create", subvolPath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to create btrfs subvolume: %s: %w", string(output), err)
+	}
+	cleanup.Add(func() {
+		if err := exec.Command("btrfs", "subvolume", "delete", subvolPath).Run(); err != nil {
+			logger.WithError(err).Errorf("failed to delete btrfs subvolume: %s", subvolPath)
+		}
+	})
+
+	// Set appropriate permissions on the subvolume
+	if err := os.Chmod(subvolPath, 0755); err != nil {
+		return fmt.Errorf("failed to set permissions on subvolume: %w", err)
+	}
+
+	if err := exec.Command("umount", mountPoint).Run(); err != nil {
+		logger.WithError(err).Error("failed to unmount stateful disk")
+	}
+
+	cleanup.Release()
+	return nil
+}
+
+// deleteStatefulDiskBtrfsSubvolume deletes a btrfs subvolume from the stateful disk image.
+// subvolName is the name of the subvolume to delete
+func (s *Server) deleteStatefulDiskBtrfsSubvolume(subvolName string) error {
+	mountPoint := "/tmp/chv-mnt"
+	logger := log.WithFields(log.Fields{
+		"mountPoint": mountPoint,
+		"subvolume":  subvolName,
+	})
+	logger.Info("deleting btrfs subvolume")
+	cleanup := cleanup.Make(func() {
+		logger.Info("clean up done")
+	})
+	defer func() {
+		cleanup.Clean()
+	}()
+
+	if err := os.MkdirAll(mountPoint, 0755); err != nil {
+		return fmt.Errorf("failed to create mount point: %w", err)
+	}
+
+	// Mount the btrfs volume
+	cmd := exec.Command("mount", "-t", "btrfs", s.statefulDiskPath, mountPoint)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to mount stateful disk: %s: %w", string(output), err)
+	}
+	cleanup.Add(func() {
+		if err := exec.Command("umount", mountPoint).Run(); err != nil {
+			logger.WithError(err).Error("failed to unmount stateful disk")
+		}
+	})
+
+	// Delete the subvolume
+	subvolPath := filepath.Join(mountPoint, subvolName)
+	cmd = exec.Command("btrfs", "subvolume", "delete", subvolPath)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("failed to delete btrfs subvolume: %s: %w", string(output), err)
+	}
+
+	// Unmount the volume
+	if err := exec.Command("umount", mountPoint).Run(); err != nil {
+		logger.WithError(err).Error("failed to unmount stateful disk")
+	}
+
+	cleanup.Release()
+	return nil
 }
 
 func (s *Server) createVM(
@@ -703,6 +806,18 @@ func (s *Server) createVM(
 	// We only need to setup the network and call the chv create VM API if we are not restoring
 	// from a snapshot.
 	if !forRestore {
+		if err := s.createStatefulDiskBtrfsSubvolume(vmName); err != nil {
+			return nil, fmt.Errorf("failed to create stateful disk btrfs subvolume: %w", err)
+		}
+		cleanup.Add(func() {
+			if err := s.deleteStatefulDiskBtrfsSubvolume(vmName); err != nil {
+				log.WithError(err).Errorf(
+					"failed to delete stateful disk btrfs subvolume: %s",
+					vmName,
+				)
+			}
+		})
+
 		tapDevice = getTapDeviceName(vmName)
 		var err error
 		err = s.fountain.CreateTapDevice(tapDevice)
@@ -895,7 +1010,6 @@ func (v *vm) destroy(
 	}
 
 	// This should be done at the very end in case we need to communicate with the VM during cleanup.
-	log.Infof("Deleting iptables rules for IP: %s", v.ip.String())
 	err = cleanupAllIPTablesRulesForIP(v.ip.IP.String())
 	if err != nil {
 		logger.Warnf("failed to delete iptables rules: %v", err)
@@ -910,12 +1024,13 @@ func (v *vm) destroy(
 }
 
 type Server struct {
-	lock          sync.RWMutex
-	vms           map[string]*vm
-	fountain      *fountain.Fountain
-	ipAllocator   *ipallocator.IPAllocator
-	portAllocator *portallocator.PortAllocator
-	config        config.ServerConfig
+	lock             sync.RWMutex
+	vms              map[string]*vm
+	fountain         *fountain.Fountain
+	ipAllocator      *ipallocator.IPAllocator
+	portAllocator    *portallocator.PortAllocator
+	config           config.ServerConfig
+	statefulDiskPath string
 }
 
 func (s *Server) GetStateDir() string {
