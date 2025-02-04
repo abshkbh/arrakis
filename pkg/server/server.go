@@ -863,7 +863,7 @@ func (s *Server) createVM(
 				Kernel:  String(kernelPath),
 				Cmdline: String(getKernelCmdLine(s.config.BridgeIP, guestIP.String(), entryPoint, vmName)),
 			},
-			Disks:   []chvapi.DiskConfig{{Path: rootfsPath}},
+			Disks:   []chvapi.DiskConfig{{Path: rootfsPath}, {Path: s.statefulDiskPath}},
 			Cpus:    &chvapi.CpusConfig{BootVcpus: numBootVcpus, MaxVcpus: numBootVcpus},
 			Memory:  &chvapi.MemoryConfig{Size: memorySizeBytes},
 			Serial:  chvapi.NewConsoleConfig(serialPortMode),
