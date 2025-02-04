@@ -114,6 +114,7 @@ func parseVMName() (string, error) {
 	return vmName, nil
 }
 
+/*
 // createUser creates a new user with the given username and password,
 // creates their home directory, and adds them to the sudo group.
 func createUser(username, password string) error {
@@ -138,6 +139,15 @@ func createUser(username, password string) error {
 
 	return nil
 }
+*/
+
+func mountStatefulDisk(vmName string) error {
+	cmd := exec.Command("mount", "-o", "subvol="+vmName, "/dev/vdb", "/home")
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to mount subvolume: %w", err)
+	}
+	return nil
+}
 
 func main() {
 	log.Infof("starting guestinit")
@@ -149,8 +159,8 @@ func main() {
 	}
 	log.Infof("XXX: vmName: %s", vmName)
 
-	if err := createUser(vmName, defaultPassword); err != nil {
-		log.WithError(err).Error("failed to create user")
+	if err := mountStatefulDisk(vmName); err != nil {
+		log.WithError(err).Error("failed to mount stateful disk")
 	}
 
 	// Use VM name for hostname

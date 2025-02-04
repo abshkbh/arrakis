@@ -58,6 +58,7 @@ RUN apt-get update && apt-get upgrade -y && apt-get install -y \
     xrdp \
     zsh \
     tigervnc-standalone-server \
+    btrfs-progs \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
