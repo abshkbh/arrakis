@@ -9,6 +9,7 @@ ConditionPathExists=!/var/lib/chv-guestinit/initialized
 
 [Service]
 Type=oneshot
+User=root
 RemainAfterExit=yes
 ExecStart=/usr/local/bin/chv-guestinit
 ExecStartPost=/usr/bin/touch /var/lib/chv-guestinit/initialized

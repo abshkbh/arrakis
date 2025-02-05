@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/sys/unix"
 )
 
 const (
@@ -118,24 +119,42 @@ func parseVMName() (string, error) {
 // creates their home directory, and adds them to the sudo group.
 func createUser(username, password string) error {
 	// Create user with home directory
+	log.Info("YYY1")
 	cmd := exec.Command("useradd", "-m", username)
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to create user %s: %w", username, err)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf(
+			"failed to create user %s: output: %s, err: %w",
+			username,
+			string(output),
+			err,
+		)
 	}
 
 	// Set user password
+	log.Info("YYY2")
 	cmd = exec.Command("chpasswd")
 	cmd.Stdin = strings.NewReader(fmt.Sprintf("%s:%s", username, password))
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to set password for user %s: %w", username, err)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf(
+			"failed to set password for user %s: output: %s, err: %w",
+			username,
+			string(output),
+			err,
+		)
 	}
 
 	// Add user to sudo group
+	log.Info("YYY3")
 	cmd = exec.Command("adduser", username, "sudo")
-	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to add user %s to sudo group: %w", username, err)
+	if output, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf(
+			"failed to add user %s to sudo group: output: %s, err: %w",
+			username,
+			string(output),
+			err,
+		)
 	}
-
+	log.Info("YYY4")
 	return nil
 }
 
@@ -143,6 +162,14 @@ func mountStatefulDisk(vmName string) error {
 	cmd := exec.Command("mount", "-o", "subvol="+vmName, "/dev/vdb", "/home")
 	if output, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("failed to mount subvolume: %w, output: %s", err, string(output))
+	}
+
+	if err := unix.Chown("/home", 0, 0); err != nil {
+		return fmt.Errorf("failed to chown /home: %w", err)
+	}
+
+	if err := unix.Chmod("/home", 0777); err != nil {
+		return fmt.Errorf("failed to chmod /home: %w", err)
 	}
 	return nil
 }
@@ -156,19 +183,14 @@ func main() {
 		log.WithError(err).Fatal("failed to parse VM name")
 	}
 
-	log.Infof("XXX1A: vmName: %s", vmName)
-	err = mountStatefulDisk(vmName)
-	if err != nil {
-		log.Infof("XXX2: err: %v", err)
-	} else {
-		log.Infof("XXX3: mounted stateful disk")
+	if err := createUser(vmName, defaultPassword); err != nil {
+		log.WithError(err).Error("failed to create user")
 	}
 
-	/*
-		if err := createUser(vmName, defaultPassword); err != nil {
-			log.WithError(err).Fatal("failed to create user")
-		}
-	*/
+	log.Infof("XXX1A: vmName: %s", vmName)
+	if err := mountStatefulDisk(vmName); err != nil {
+		log.WithError(err).Fatal("failed to mount stateful disk")
+	}
 
 	// Use VM name for hostname
 	if err := os.WriteFile("/etc/hostname", []byte(vmName), 0644); err != nil {
