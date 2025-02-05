@@ -164,9 +164,11 @@ func main() {
 		log.Infof("XXX3: mounted stateful disk")
 	}
 
-	if err := createUser(vmName, defaultPassword); err != nil {
-		log.WithError(err).Fatal("failed to create user")
-	}
+	/*
+		if err := createUser(vmName, defaultPassword); err != nil {
+			log.WithError(err).Fatal("failed to create user")
+		}
+	*/
 
 	// Use VM name for hostname
 	if err := os.WriteFile("/etc/hostname", []byte(vmName), 0644); err != nil {
