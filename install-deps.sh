@@ -26,16 +26,17 @@ nvm install node
 echo "Installing OpenAPI Generator CLI..."
 npm install @openapitools/openapi-generator-cli -g
 
-# Install default JDK without prompting for confirmation
-echo "Installing default JDK..."
-sudo apt install -y default-jdk
-
 # Install Go programming language
 # Ensure the go1.23.6.linux-amd64.tar.gz file is present in the current directory.
 echo "Installing Go..."
 sudo rm -rf /usr/local/go
+curl -LO https://go.dev/dl/go1.23.6.linux-amd64.tar.gz
 sudo tar -C /usr/local -xzf go1.23.6.linux-amd64.tar.gz
-export PATH=$PATH:/usr/local/go/bin
+echo "export PATH=$PATH:/usr/local/go/bin" >> ~/.bashrc
+
+# Install default JDK without prompting for confirmation
+echo "Installing default JDK..."
+sudo apt install -y default-jdk
 
 # Install Docker
 echo "Installing Docker..."
