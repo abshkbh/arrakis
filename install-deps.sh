@@ -69,6 +69,7 @@ if [ -d "$HOME/projects/chv-starter-pack" ]; then
 else
   cd "$HOME/projects"
   git clone https://github.com/abshkbh/chv-starter-pack.git
+  ./install_images.py
 fi
 cd "$HOME"
 
