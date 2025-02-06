@@ -63,9 +63,13 @@ echo "Installing Docker CE and related packages..."
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 echo "Cloning project..."
-mkdir -p $HOME/projects
-cd $HOME/projects
-git clone https://github.com/abshkbh/chv-starter-pack.git
-cd $HOME
+mkdir -p "$HOME/projects"
+if [ -d "$HOME/projects/chv-starter-pack" ]; then
+  echo "chv-starter-pack already exists. Skipping clone."
+else
+  cd "$HOME/projects"
+  git clone https://github.com/abshkbh/chv-starter-pack.git
+fi
+cd "$HOME"
 
 echo "Installation completed successfully."
