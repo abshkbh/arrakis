@@ -58,4 +58,10 @@ sudo apt-get update
 echo "Installing Docker CE and related packages..."
 sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
+echo "Cloning project..."
+mkdir -p $HOME/projects
+cd $HOME/projects
+git clone https://github.com/abshkbh/chv-starter-pack.git
+cd $HOME
+
 echo "Installation completed successfully."
