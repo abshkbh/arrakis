@@ -5,6 +5,10 @@ set -euo pipefail
 echo "Updating apt package list..."
 sudo apt update
 
+# Install make
+echo "Installing make..."
+sudo apt install -y make
+
 # Install nvm using the provided install script
 echo "Installing nvm..."
 curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.1/install.sh | bash
