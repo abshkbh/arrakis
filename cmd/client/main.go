@@ -300,7 +300,7 @@ func downloadFiles(vmName string, paths []string) error {
 	return nil
 }
 
-func listVM(vmName string) error {
+func info(vmName string) error {
 	resp, http_resp, err := apiClient.DefaultAPI.VmsNameGet(context.Background(), vmName).Execute()
 	if err != nil {
 		body, _ := io.ReadAll(http_resp.Body)
@@ -442,7 +442,7 @@ func main() {
 				},
 			},
 			{
-				Name:  "list",
+				Name:  "info",
 				Usage: "List VM info",
 				Flags: []cli.Flag{
 					&cli.StringFlag{
@@ -453,7 +453,7 @@ func main() {
 					},
 				},
 				Action: func(ctx *cli.Context) error {
-					return listVM(ctx.String("name"))
+					return info(ctx.String("name"))
 				},
 			},
 			{
