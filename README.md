@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/images/arrakis-logo.png" alt="Arrakis Logo" height="200" width="1000">
+  <img src="docs/images/arrakis-logo.png" alt="Arrakis Logo" height="400" width="1000">
 </p>
 
 # Arrakis
