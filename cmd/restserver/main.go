@@ -270,7 +270,13 @@ func (s *restServer) vmCommand(w http.ResponseWriter, r *http.Request) {
 	}
 
 	cmd := req.GetCmd()
-	resp, err := s.vmServer.VMCommand(r.Context(), vmName, cmd)
+	// Default to blocking if not specified
+	blocking := true
+	if req.Blocking != nil {
+		blocking = *req.Blocking
+	}
+
+	resp, err := s.vmServer.VMCommand(r.Context(), vmName, cmd, blocking)
 	if err != nil {
 		logger.WithFields(log.Fields{
 			"vmName": vmName,

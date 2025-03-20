@@ -441,6 +441,9 @@ components:
         cmd:
           type: string
           description: Command to execute in the VM
+        blocking:
+          type: boolean
+          description: Whether to wait for the command to complete before returning (default true)
     VmCommandResponse:
       type: object
       properties:

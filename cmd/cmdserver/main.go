@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -116,8 +117,11 @@ func runCommandHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Cmd string `json:"cmd"`
+		Cmd      string `json:"cmd"`
+		Blocking bool   `json:"blocking,omitempty"`
 	}
+	// Block by default if not specified in the payload.
+	req.Blocking = true
 
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
@@ -172,36 +176,130 @@ func runCommandHandler(w http.ResponseWriter, r *http.Request) {
 		"workingDir": cmd.Dir,
 	}).Info("Executing command")
 
-	// Execute the command and capture the combined output
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+	// Handle command execution based on blocking mode
+	if req.Blocking {
+		// Execute the command and capture the combined output in blocking mode
+		output, err := cmd.CombinedOutput()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"api":  "run_cmd",
+				"cmd":  cmdName,
+				"args": cmdArgs,
+			}).Errorf("command execution failed output: %s err: %v", string(output), err)
+			resp := cmdserver.RunCmdResponse{
+				Error:  err.Error(),
+				Output: string(output),
+			}
+			writeJSON(w, resp)
+			return
+		}
+
+		// Log successful execution
 		log.WithFields(log.Fields{
-			"api":  "run_cmd",
-			"cmd":  cmdName,
-			"args": cmdArgs,
-		}).Errorf("command execution failed output: %s err: %v", string(output), err)
+			"api":        "run_cmd",
+			"cmd":        cmdName,
+			"args":       cmdArgs,
+			"output":     string(output),
+			"workingDir": cmd.Dir,
+		}).Info("command executed successfully")
+
+		// Respond with the command output
 		resp := cmdserver.RunCmdResponse{
-			Error:  err.Error(),
 			Output: string(output),
 		}
 		writeJSON(w, resp)
-		return
-	}
+	} else {
+		// Non-blocking mode: start the command but don't wait for it to complete
+		// Set up pipes for stdout and stderr
+		stdoutPipe, err := cmd.StdoutPipe()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"api":  "run_cmd",
+				"cmd":  cmdName,
+				"args": cmdArgs,
+			}).Errorf("failed to create stdout pipe: %v", err)
+			resp := cmdserver.RunCmdResponse{
+				Error: fmt.Sprintf("failed to create stdout pipe: %v", err),
+			}
+			writeJSON(w, resp)
+			return
+		}
 
-	// Log successful execution
-	log.WithFields(log.Fields{
-		"api":        "run_cmd",
-		"cmd":        cmdName,
-		"args":       cmdArgs,
-		"output":     string(output),
-		"workingDir": cmd.Dir,
-	}).Info("command executed successfully")
+		stderrPipe, err := cmd.StderrPipe()
+		if err != nil {
+			log.WithFields(log.Fields{
+				"api":  "run_cmd",
+				"cmd":  cmdName,
+				"args": cmdArgs,
+			}).Errorf("failed to create stderr pipe: %v", err)
+			resp := cmdserver.RunCmdResponse{
+				Error: fmt.Sprintf("failed to create stderr pipe: %v", err),
+			}
+			writeJSON(w, resp)
+			return
+		}
 
-	// Respond with the command output
-	resp := cmdserver.RunCmdResponse{
-		Output: string(output),
+		// Start the command
+		if err := cmd.Start(); err != nil {
+			log.WithFields(log.Fields{
+				"api":  "run_cmd",
+				"cmd":  cmdName,
+				"args": cmdArgs,
+			}).Errorf("failed to start command: %v", err)
+			resp := cmdserver.RunCmdResponse{
+				Error: fmt.Sprintf("failed to start command: %v", err),
+			}
+			writeJSON(w, resp)
+			return
+		}
+
+		// Start goroutines to handle stdout and stderr in the background
+		go func() {
+			scanner := bufio.NewScanner(stdoutPipe)
+			for scanner.Scan() {
+				log.WithFields(log.Fields{
+					"api":    "run_cmd",
+					"cmd":    cmdName,
+					"stdout": scanner.Text(),
+				}).Debug("command stdout")
+			}
+		}()
+
+		go func() {
+			scanner := bufio.NewScanner(stderrPipe)
+			for scanner.Scan() {
+				log.WithFields(log.Fields{
+					"api":    "run_cmd",
+					"cmd":    cmdName,
+					"stderr": scanner.Text(),
+				}).Debug("command stderr")
+			}
+		}()
+
+		// Start a goroutine to wait for the command to complete
+		go func() {
+			err := cmd.Wait()
+			if err != nil {
+				log.WithFields(log.Fields{
+					"api":  "run_cmd",
+					"cmd":  cmdName,
+					"args": cmdArgs,
+				}).Errorf("command execution failed: %v", err)
+			} else {
+				log.WithFields(log.Fields{
+					"api":  "run_cmd",
+					"cmd":  cmdName,
+					"args": cmdArgs,
+				}).Info("command completed successfully")
+			}
+		}()
+
+		// Respond immediately with a success message
+		resp := cmdserver.RunCmdResponse{
+			Output: fmt.Sprintf("Command '%s' started in background", cmd.String()),
+		}
+		writeJSON(w, resp)
 	}
-	writeJSON(w, resp)
 }
 
 // indexHandler handles "/" GET requests.

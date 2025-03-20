@@ -1698,7 +1698,7 @@ func (s *Server) ResumeVM(ctx context.Context, req *serverapi.VMRequest) (*serve
 	}, nil
 }
 
-func (s *Server) VMCommand(ctx context.Context, vmName string, cmd string) (*serverapi.VmCommandResponse, error) {
+func (s *Server) VMCommand(ctx context.Context, vmName string, cmd string, blocking bool) (*serverapi.VmCommandResponse, error) {
 	vm := s.getVMAtomic(vmName)
 	if vm == nil {
 		return nil, status.Error(codes.NotFound, fmt.Sprintf("vm not found: %s", vmName))
@@ -1709,7 +1709,7 @@ func (s *Server) VMCommand(ctx context.Context, vmName string, cmd string) (*ser
 		Timeout: 30 * time.Second,
 	}
 
-	return vm.handleRun(ctx, client, url, cmd)
+	return vm.handleRun(ctx, client, url, cmd, blocking)
 }
 
 func (s *Server) VMFileUpload(ctx context.Context, vmName string, files []serverapi.VmFileUploadRequestFilesInner) (*serverapi.VmFileUploadResponse, error) {
@@ -1758,11 +1758,13 @@ func (s *Server) VMFileUpload(ctx context.Context, vmName string, files []server
 	return &serverapi.VmFileUploadResponse{}, nil
 }
 
-func (v *vm) handleRun(ctx context.Context, client *http.Client, baseURL string, cmd string) (*serverapi.VmCommandResponse, error) {
+func (v *vm) handleRun(ctx context.Context, client *http.Client, baseURL string, cmd string, blocking bool) (*serverapi.VmCommandResponse, error) {
 	reqBody := struct {
-		Cmd string `json:"cmd"`
+		Cmd      string `json:"cmd"`
+		Blocking bool   `json:"blocking"`
 	}{
-		Cmd: cmd,
+		Cmd:      cmd,
+		Blocking: blocking,
 	}
 
 	body, err := json.Marshal(reqBody)
