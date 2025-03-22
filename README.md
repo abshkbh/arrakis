@@ -68,7 +68,7 @@ Arrakis comes with a Python SDK [py-arrakis](https://pypi.org/project/py-arrakis
 - Use py-arrakis to interact with `arrakis-restserver`.
 
 - Run untrusted code
-  ```python
+  ```py
   # Replace this with the ip:port where `arrakis-restserver` is running.
   sandbox_manager = SandboxManager('http://127.0.0.1:7000')
 
@@ -80,7 +80,7 @@ Arrakis comes with a Python SDK [py-arrakis](https://pypi.org/project/py-arrakis
   ```
 
 - Snapshot and restore a sandbox
-  ```python
+  ```py
   # Start a sandbox and write some data to a file.
   sandbox_name = 'agent-sandbox'
   sandbox = sandbox_manager.start_sandbox(sandbox_name)
@@ -110,7 +110,7 @@ ___
 
 - Start a sandbox and get metadata about the sandbox including the VNC connection details.
 
-  ```python
+  ```py
   # Replace this with the ip:port where `arrakis-restserver` is running.
   sandbox_manager = SandboxManager('http://127.0.0.1:7000')
   sb = sandbox_manager.start_sandbox('agent-sandbox')
