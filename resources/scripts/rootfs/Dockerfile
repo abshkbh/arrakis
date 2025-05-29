@@ -38,7 +38,7 @@ RUN apt-get update && \
     traceroute \
     dnsutils \
     tcpdump \
-    netcat \
+    netcat-openbsd \
     ssh \
     sudo \
     man-db \
